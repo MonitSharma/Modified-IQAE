@@ -27,11 +27,16 @@ Unless specified otherwise in the config, these keys will use their default valu
 ## Cite this work
 If you find our work useful, please consider using the following citation:
 ```
-@article
-{miqae,
-   author={Fukuzawa, Shion and Christopher Ho and Sandy Irani and Jasen P. Zion}
-   title={Modified IQAE is Asymptotically Optimal},
-   publisher={arXiv},
-   year=2022,
+@misc{fukuzawa2022,
+  title = {Modified {{Iterative Quantum Amplitude Estimation}} Is {{Asymptotically Optimal}}},
+  author = {Fukuzawa, Shion and Ho, Christopher and Irani, Sandy and Zion, Jasen},
+  year = {2022},
+  month = aug,
+  number = {arXiv:2208.14612},
+  eprint = {2208.14612},
+  eprinttype = {arxiv},
+  primaryclass = {quant-ph},
+  keywords = {Quantum Physics},
 }
+
 ```
