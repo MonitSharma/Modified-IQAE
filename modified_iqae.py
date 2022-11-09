@@ -21,14 +21,13 @@ from qiskit.algorithms import amplitude_estimators, EstimationProblem
 from qiskit.algorithms import IterativeAmplitudeEstimation as BaseIterativeAmplitudeEstimation
 
 from algorithms import IterativeAmplitudeEstimation, ModifiedIterativeAmplitudeEstimation
-from algorithms import NoQuantumIterativeAmplitudeEstimation
 from operators import *
 from plots import make_plots
 
 
 with open('./config.yaml') as f:
     config = yaml.safe_load(f)
-    
+
 # add default arguments if not already there
 defaults = {
     'experiment_name': '{}_modified-iqae',
@@ -70,7 +69,7 @@ if isinstance(step, int):
     amplitudes = np.arange((N // step)+1) * step
 else:
     amplitudes = step
-    
+
 epsilons = [float(eps) for eps in epsilons]
 
 if confint_method == 'all':
@@ -81,7 +80,7 @@ else:
 algs = ['miae']
 if compare:
     algs.append('iae')
-    
+
 results_per_round_path = os.path.join(results_path, 'per_round')
 
 if not os.path.exists('./results'):
@@ -96,7 +95,7 @@ if not os.path.exists(results_per_round_path):
 # define the estimation problem and oracle function
 
 def make_problem(n, marked):
-    
+
     def good_state(state):
         bin_marked = [(n-len(bin(s))+2)*'0'+bin(s)[2:] for s in marked]
         return (state in bin_marked)
@@ -107,7 +106,7 @@ def make_problem(n, marked):
         objective_qubits=range(n),
         is_good_state=good_state       # the "good" state Psi1 is identified as measuring |1> in qubit 0
     )
-    
+
     return problem
 
 # process the per-round info
@@ -127,32 +126,32 @@ def process_state(state, verbose=False):
 
     return shots_i, queries_i, k_i
 
-def experiment(alg: str, shots: int, M: int, N: int, alpha: float, 
-               epsilon: float, confint_method: str, noise: float, 
-               runs: int, simulator: str):
+def experiment(alg: str, shots: int, M: int, N: int,
+               alpha: float, epsilon: float, confint_method: str,
+               noise: float, runs: int, simulator: str):
 
     AE = None
     if alg == 'miae':
-        AE = ModifiedIterativeAmplitudeEstimation(epsilon_target=epsilon, 
-                                                  alpha=alpha, 
-                                                  confint_method=confint_method, 
+        AE = ModifiedIterativeAmplitudeEstimation(epsilon_target=epsilon,
+                                                  alpha=alpha,
+                                                  confint_method=confint_method,
                                                   quantum_instance=simulator)
 
     else: # alg == 'iae'
-        AE = IterativeAmplitudeEstimation(epsilon_target=epsilon, 
+        AE = IterativeAmplitudeEstimation(epsilon_target=epsilon,
                                           alpha=alpha,
-                                          confint_method=confint_method, 
+                                          confint_method=confint_method,
                                           quantum_instance=simulator)
 
-        
+
     n = int(np.log2(N))
     marked = sample(range(N), M)
     problem = make_problem(n, marked)
     ae_results = []
     successes = []
 
-    for _ in range(runs):        
-    
+    for _ in range(runs):
+
         # setup
         state = defaultdict(dict)
         scaling = 1 # figure out what to do here
@@ -168,19 +167,19 @@ def experiment(alg: str, shots: int, M: int, N: int, alpha: float,
 
             marked = sample(range(N), scaled_noisy_M)
             problem = make_problem(n, marked)
-            
+
             # scale back to original resolution
             noisy_M = scaled_noisy_M / scaling
             N = config['a_resolution']
             n = int(np.log2(N))
-            
+
         # run estimation
         ae_result = AE.estimate(problem,
                                 shots=shots,
                                 ground_truth=noisy_M/N if noise > 0 else M/N,
                                 state=state,
                                 verbose=verbose)
-        
+
         ae_results.append(ae_result)
         successes.append(ae_result.confidence_interval_processed[0] <= noisy_M/N if noise > 0 else M/N <= ae_result.confidence_interval_processed[1])
 
@@ -208,7 +207,7 @@ def experiment(alg: str, shots: int, M: int, N: int, alpha: float,
     with open(results_csv, 'a', newline='') as f:
         writer = csv.writer(f)
         writer.writerow([epsilon, 1-successes.mean()] + queries.tolist())
-    
+
     if verbose:
         print(f'Results using algorithm \'{alg}\', amplitude {M}/{N} = {M/N}', end='')
         print(f' (with noise: {noisy_M/N})' if noise > 0 else '', end=' ')
@@ -227,7 +226,7 @@ if __name__ == '__main__':
     # re-save the config into the file
     with open(os.path.join(results_path, 'config.yaml'), 'w') as out:
         yaml.dump(config, out)
-        
+
     for alg, M, epsilon, method in tqdm(experiment_combos):
         experiment(alg, shots, M, N, alpha, epsilon, method, noise, runs, simulator)
 
@@ -236,4 +235,3 @@ if __name__ == '__main__':
         make_plots(results_path)
 
     print('Done')
-        
