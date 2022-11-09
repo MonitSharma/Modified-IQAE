@@ -14,6 +14,7 @@
 
 from typing import Optional, Union, List, Tuple, Dict, cast
 import numpy as np
+import math
 from scipy.stats import beta
 
 from qiskit import Aer, ClassicalRegister, QuantumCircuit
@@ -343,14 +344,36 @@ class ModifiedIterativeAmplitudeEstimation(AmplitudeEstimator):
                 round_shots = 0
                 
                 while powers[num_iterations - 1] == k:
-                    
-                    N = min(round_shots + shots, shots_i_max)
 
-                    shots = N - round_shots
-                    if self._quantum_instance:
-                        self._quantum_instance._run_config.shots = N - round_shots
-                    
-                    round_shots = N
+                    # Early/late condition by ChebAE
+                    if self._confint_method == "beta":
+                        nu = 8
+                        # If early...
+                        if self._check_early(shots, alpha_i, nu, theta_intervals, self._epsilon):
+                            N = min(round_shots + shots, shots_i_max)
+
+                            shots = N - round_shots
+                            if self._quantum_instance:
+                                self._quantum_instance._run_config.shots = N - round_shots
+                            
+                            round_shots = N
+                        # If late...
+                        else:
+                            if self._quantum_instance:
+                                self._quantum_instance._run_config.shots = 1
+
+                            N = min(round_shots + 1, shots_i_max)                            
+                            round_shots = N
+
+                    # Standard Chernoff version                         
+                    else: 
+                        N = min(round_shots + shots, shots_i_max)
+
+                        shots = N - round_shots
+                        if self._quantum_instance:
+                            self._quantum_instance._run_config.shots = N - round_shots
+                        
+                        round_shots = N
 
                     if verbose:
                         print()
@@ -443,6 +466,13 @@ class ModifiedIterativeAmplitudeEstimation(AmplitudeEstimator):
                         break
     
                     # get the next k
+                    if math.isnan(1 / (theta_intervals[-1][1]-theta_intervals[-1][0])):
+                        print(f'confint: {self._confint_method}')
+                        print('a i interval:', [a_i_min, a_i_max])
+                        print('theta i interval:', [theta_i_min, theta_i_max])
+                        print('theta interval:', [theta_l, theta_u])
+                        print('a interval:', [a_l, a_u])
+                        print(f"ISNAN: {theta_intervals[-1]}\n")
                     k = self._find_next_k(
                         powers[-1],
                         theta_intervals[-1],
@@ -505,6 +535,20 @@ class ModifiedIterativeAmplitudeEstimation(AmplitudeEstimator):
         state['ks'] = powers
 
         return result
+
+    def _check_early(self, shots, alpha, nu, theta_intervals, eps):
+        import math 
+        # Get max eps threshold 
+        eps_max = -math.inf 
+        for x in range(1, shots):
+            lower = beta.ppf(1 - alpha / 2, x + 1, shots - x)
+            upper = beta.ppf(alpha / 2, x, shots - x + 1)
+            if np.abs(upper - lower) > eps_max:
+                eps_max = np.abs(upper - lower)
+        num = theta_intervals[-1][1] - theta_intervals[-1][0]
+        den = np.abs(math.sin(theta_intervals[-1][1] - math.sin(theta_intervals[-1][0])))
+        return eps_max * num / den > eps * nu 
+        
 
 
 class ModifiedIterativeAmplitudeEstimationResult(AmplitudeEstimatorResult):
