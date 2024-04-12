@@ -15,16 +15,17 @@ from tqdm import tqdm
 
 from random import sample, seed
 from collections import defaultdict
-
-from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister, Aer, transpile, assemble
-from qiskit.algorithms import amplitude_estimators, EstimationProblem
-from qiskit.algorithms import IterativeAmplitudeEstimation as BaseIterativeAmplitudeEstimation
+from qiskit_aer import AerSimulator
+from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister, transpile, assemble
+from qiskit_algorithms import amplitude_estimators, EstimationProblem
+from qiskit_algorithms import IterativeAmplitudeEstimation as BaseIterativeAmplitudeEstimation
 
 from algorithms import IterativeAmplitudeEstimation, ModifiedIterativeAmplitudeEstimation
+from qiskit.primitives import BackendSampler
 from operators import *
 from plots import make_plots
-
-
+backend = AerSimulator(method='statevector')
+sampler = BackendSampler(backend=backend)
 with open('./config.yaml') as f:
     config = yaml.safe_load(f)
 
@@ -135,13 +136,13 @@ def experiment(alg: str, shots: int, M: int, N: int,
         AE = ModifiedIterativeAmplitudeEstimation(epsilon_target=epsilon,
                                                   alpha=alpha,
                                                   confint_method=confint_method,
-                                                  quantum_instance=simulator)
+                                                  sampler=sampler)
 
     else: # alg == 'iae'
         AE = IterativeAmplitudeEstimation(epsilon_target=epsilon,
                                           alpha=alpha,
                                           confint_method=confint_method,
-                                          quantum_instance=simulator)
+                                          sampler=sampler)
 
 
     n = int(np.log2(N))

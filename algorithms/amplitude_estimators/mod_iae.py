@@ -16,10 +16,11 @@ from typing import Optional, Union, List, Tuple, Dict, cast
 import numpy as np
 import math
 from scipy.stats import beta
-
-from qiskit import Aer, ClassicalRegister, QuantumCircuit
-from qiskit.providers import BaseBackend, Backend
-from qiskit.utils import QuantumInstance
+from qiskit_aer import AerSimulator
+from qiskit import ClassicalRegister, QuantumCircuit
+#from qiskit.providers import BaseBackend, Backend
+from qiskit.primitives import BaseSampler, Sampler
+#from qiskit.utils import QuantumInstance
 
 from .amplitude_estimator import AmplitudeEstimator, AmplitudeEstimatorResult
 from .estimation_problem import EstimationProblem
@@ -53,7 +54,7 @@ class ModifiedIterativeAmplitudeEstimation(AmplitudeEstimator):
         alpha: float,
         confint_method: str = "beta",
         min_ratio: float = 2,
-        quantum_instance: Optional[Union[QuantumInstance, BaseBackend, Backend]] = None,
+        sampler: BaseSampler | None = None,
     ) -> None:
         r"""
         The output of the algorithm is an estimate for the amplitude `a`, that with at least
@@ -90,12 +91,16 @@ class ModifiedIterativeAmplitudeEstimation(AmplitudeEstimator):
 
         super().__init__()
 
-        # set quantum instance
-        if quantum_instance == 'classical':
-            self.quantum_instance = None
-        else:
-            quantum_instance = Aer.get_backend(quantum_instance)
-            self.quantum_instance = quantum_instance
+        # # set quantum instance
+        # if quantum_instance == 'classical':
+        #     self.quantum_instance = None
+        # else:
+        #     quantum_instance = Aer.get_backend(quantum_instance)
+        #     self.quantum_instance = quantum_instance
+
+        # set sampler
+        self.sampler = sampler
+
 
         # store parameters
         self._epsilon = epsilon_target
@@ -104,26 +109,45 @@ class ModifiedIterativeAmplitudeEstimation(AmplitudeEstimator):
         self._confint_method = confint_method
 
     @property
-    def quantum_instance(self) -> Optional[QuantumInstance]:
-        """Get the quantum instance.
+    def sampler(self) -> BaseSampler | None:
+        """Get the sampler primitive.
 
         Returns:
-            The quantum instance used to run this algorithm.
+            The sampler primitive to evaluate the circuits.
         """
-        return self._quantum_instance
+        return self._sampler   
 
-    @quantum_instance.setter
-    def quantum_instance(
-        self, quantum_instance: Union[QuantumInstance, BaseBackend, Backend]
-    ) -> None:
-        """Set quantum instance.
+    # @property
+    # def quantum_instance(self) -> Optional[QuantumInstance]:
+    #     """Get the quantum instance.
+
+    #     Returns:
+    #         The quantum instance used to run this algorithm.
+    #     """
+    #     return self._quantum_instance
+
+    # @quantum_instance.setter
+    # def quantum_instance(
+    #     self, quantum_instance: Union[QuantumInstance, BaseBackend, Backend]
+    # ) -> None:
+    #     """Set quantum instance.
+
+    #     Args:
+    #         quantum_instance: The quantum instance used to run this algorithm.
+    #     """
+    #     if isinstance(quantum_instance, (BaseBackend, Backend)):
+    #         quantum_instance = QuantumInstance(quantum_instance)
+    #     self._quantum_instance = quantum_instance
+
+
+    @sampler.setter
+    def sampler(self, sampler: BaseSampler) -> None:
+        """Set sampler primitive.
 
         Args:
-            quantum_instance: The quantum instance used to run this algorithm.
+            sampler: A sampler primitive to evaluate the circuits.
         """
-        if isinstance(quantum_instance, (BaseBackend, Backend)):
-            quantum_instance = QuantumInstance(quantum_instance)
-        self._quantum_instance = quantum_instance
+        self._sampler = sampler
 
     @property
     def epsilon_target(self) -> float:
@@ -300,10 +324,12 @@ class ModifiedIterativeAmplitudeEstimation(AmplitudeEstimator):
 
         # for statevector we can directly return the probability to measure 1
         # note, that no iterations here are necessary
-        if self._quantum_instance and self._quantum_instance.is_statevector:
+        
+        if self._sampler is None:
             # simulate circuit
-            circuit = self.construct_circuit(estimation_problem, k=0, measurement=False)
-            ret = self._quantum_instance.execute(circuit)
+            circuit = self.construct_circuit(estimation_problem, k=0, measurement=True)
+            job = self._sampler.run([circuit])
+            ret = job.result()
 
             # get statevector
             statevector = ret.get_statevector(circuit)
@@ -353,14 +379,15 @@ class ModifiedIterativeAmplitudeEstimation(AmplitudeEstimator):
                             N = min(round_shots + shots, shots_i_max)
 
                             shots = N - round_shots
-                            if self._quantum_instance:
-                                self._quantum_instance._run_config.shots = N - round_shots
+                    
+                            if self._sampler:
+                                self._sampler._run_options.shots = N - round_shots
                             
                             round_shots = N
                         # If late...
                         else:
-                            if self._quantum_instance:
-                                self._quantum_instance._run_config.shots = 1
+                            if self._sampler:
+                                self._sampler._run_options.shots = 1
 
                             N = min(round_shots + 1, shots_i_max)                            
                             round_shots = N
@@ -370,8 +397,8 @@ class ModifiedIterativeAmplitudeEstimation(AmplitudeEstimator):
                         N = min(round_shots + shots, shots_i_max)
 
                         shots = N - round_shots
-                        if self._quantum_instance:
-                            self._quantum_instance._run_config.shots = N - round_shots
+                        if self._sampler:
+                            self._sampler._run_options.shots = N - round_shots
                         
                         round_shots = N
 
@@ -382,12 +409,18 @@ class ModifiedIterativeAmplitudeEstimation(AmplitudeEstimator):
                         print('N - round_shots:', shots)
                 
                     ## run measurements for Q^k A|0> 
-                    if self._quantum_instance:
+                    if self._sampler:
                         circuit = self.construct_circuit(estimation_problem, k, measurement=True)
-                        ret = self._quantum_instance.execute(circuit)
+                        counts = {}
+                        job = self._sampler.run([circuit])
+                        ret = job.result()
+                        #ret = self._sampler.run(circuit)
 
                         # get the counts and store them
-                        counts = ret.get_counts(circuit) # TODO: is this sum of 1s measured across all shots?
+                        #counts = ret.get_counts(circuit) # TODO: is this sum of 1s measured across all shots?
+                        counts = {
+                            k: round(v * shots) for k, v in ret.quasi_dists[0].binary_probabilities().items()
+                            }
 
                         # calculate the probability of measuring '1', 'prob' is a_i in the paper
                         num_qubits = circuit.num_qubits - circuit.num_ancillas
@@ -493,8 +526,13 @@ class ModifiedIterativeAmplitudeEstimation(AmplitudeEstimator):
 
                 # track number of Q-oracle calls
                 num_oracle_queries += N * K
+                if 'round_shots' not in state:
+                    state['round_shots'] = {}
+                if 'n_queries' not in state:
+                    state['n_queries'] = {}
                 
 #                 # bookkeeping
+
                 state['round_shots'][k] = N
                 state['n_queries'][k] = N * K
                 
