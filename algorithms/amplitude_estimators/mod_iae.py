@@ -117,27 +117,7 @@ class ModifiedIterativeAmplitudeEstimation(AmplitudeEstimator):
         """
         return self._sampler   
 
-    # @property
-    # def quantum_instance(self) -> Optional[QuantumInstance]:
-    #     """Get the quantum instance.
-
-    #     Returns:
-    #         The quantum instance used to run this algorithm.
-    #     """
-    #     return self._quantum_instance
-
-    # @quantum_instance.setter
-    # def quantum_instance(
-    #     self, quantum_instance: Union[QuantumInstance, BaseBackend, Backend]
-    # ) -> None:
-    #     """Set quantum instance.
-
-    #     Args:
-    #         quantum_instance: The quantum instance used to run this algorithm.
-    #     """
-    #     if isinstance(quantum_instance, (BaseBackend, Backend)):
-    #         quantum_instance = QuantumInstance(quantum_instance)
-    #     self._quantum_instance = quantum_instance
+   
 
 
     @sampler.setter
